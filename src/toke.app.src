@@ -1,6 +1,6 @@
 {application, toke,
  [{description, "Tokyo Cabinet driver for Erlang"},
-  {vsn, "2.7.1"},
+  {vsn, git},
   {modules, []},
   {registered, []},
   {applications, [kernel, stdlib]}]}.
