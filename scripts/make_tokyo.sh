@@ -4,7 +4,7 @@ set -e
 
 pushd ${PWD}/deps/
 if [ ! -d tokyocabinet ]; then
-	tar xzf tokyocabinet-1.4.48.tar.gz
+    tar xzf tokyocabinet-1.4.48.tar.gz
     mv tokyocabinet-1.4.48 tokyocabinet
 fi
 
