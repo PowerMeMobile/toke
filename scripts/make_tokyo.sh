@@ -16,6 +16,7 @@ fi
 
 LDFLAGS="" CXXFLAGS="" make
 
+mkdir -p ../../priv/
 cp libtokyocabinet.so.9.11.0 ../../priv/libtokyocabinet.so.9
 cp tchmgr ../../priv/
 
