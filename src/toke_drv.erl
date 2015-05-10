@@ -21,7 +21,7 @@
 
 -export([new/1, delete/1, tune/5, set_cache/2, set_xm_size/2, set_df_unit/2,
          open/3, close/1, insert/3, insert_new/3, insert_concat/3,
-         insert_async/3, delete/2, delete_if_value_eq/3, get/2, fold/3,
+         insert_async/3, delete/2, delete_if_value_eq/3, get/2, add_int/3, fold/3,
          update_atomically/3, stop/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3,
@@ -53,6 +53,7 @@
 -define(TOKE_DELETE_IF_EQ,  13).
 -define(TOKE_GET,           14).
 -define(TOKE_GET_ALL,       15).
+-define(TOKE_ADD_INT,       16).
 
 %% KEEP IN SYNC WITH TOKE.H
 -define(TUNE_KEYS,          [large, deflate, bzip, tcbs, excodec]).
@@ -128,6 +129,10 @@ delete_if_value_eq(Pid, Key, Obj) when is_binary(Key) andalso is_binary(Obj) ->
 %% Fetch a key from the db. Returns 'not_found' on occasion.
 get(Pid, Key) when is_binary(Key) ->
     gen_server:call(Pid, {get, Key}, infinity).
+
+%% Add an integer to a record.
+add_int(Pid, Key, Value) when is_binary(Key) andalso is_integer(Value) ->
+    gen_server:call(Pid, {add_int, Key, Value}, infinity).
 
 %% Fold over every value in the db.
 fold(Fun, Init, Pid) ->
@@ -222,6 +227,12 @@ handle_call({delete_if_value_eq, Key, Obj}, _From, Port) ->
 
 handle_call({get, Key}, _From, Port) ->
     {reply, internal_get(Key, Port), Port};
+
+handle_call({add_int, Key, Value}, _From, Port) ->
+    KeySize = size(Key),
+    port_command(Port, <<?TOKE_ADD_INT/native, KeySize:64/native,
+                        Key/binary, Value:32/native>>),
+    simple_reply(Port);
 
 handle_call({fold, Fun, Init}, _From, Port) ->
     port_command(Port, <<?TOKE_GET_ALL/native>>),

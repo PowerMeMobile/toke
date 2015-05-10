@@ -39,6 +39,7 @@
 #define READER_ERROR          -2
 
 #define ATOM_SPEC_LEN          6
+#define ADD_INT_RESULT_SPEC_LEN 6
 #define GET_RESULT_SPEC_LEN    7
 #define ITER_RESULT_SPEC_LEN   10
 #define READER_ERROR_SPEC_LEN  11
@@ -47,9 +48,10 @@
 typedef struct {
   ErlDrvPort port;
   TCHDB *hdb;
-  ErlDrvTermData* get_result_spec;   /* store these in here so that */
-  ErlDrvTermData* iter_result_spec;  /* they're not shared between  */
-  ErlDrvTermData* reader_error_spec; /* threads                     */
+  ErlDrvTermData* get_result_spec;     /* store these in here so that */
+  ErlDrvTermData* add_int_result_spec; /* they're not shared between  */
+  ErlDrvTermData* iter_result_spec;    /* threads                     */
+  ErlDrvTermData* reader_error_spec;
   ErlDrvTermData* tokyo_error_spec;
 } TokeData;
 
@@ -300,6 +302,19 @@ static ErlDrvData toke_start(const ErlDrvPort port, char *const buff) {
   td->get_result_spec[5] = ERL_DRV_TUPLE;
   td->get_result_spec[6] = 2;
 
+  td->add_int_result_spec = (ErlDrvTermData*)
+    driver_alloc(ADD_INT_RESULT_SPEC_LEN * sizeof(ErlDrvTermData));
+
+  if (NULL == td->add_int_result_spec)
+    return ERL_DRV_ERROR_GENERAL;
+
+  td->add_int_result_spec[0] = ERL_DRV_ATOM;
+  td->add_int_result_spec[1] = driver_mk_atom("toke_reply");
+  td->add_int_result_spec[2] = ERL_DRV_INT;
+  td->add_int_result_spec[3] = 0;
+  td->add_int_result_spec[4] = ERL_DRV_TUPLE;
+  td->add_int_result_spec[5] = 2;
+
   td->iter_result_spec = (ErlDrvTermData*)
     driver_alloc(ITER_RESULT_SPEC_LEN * sizeof(ErlDrvTermData));
 
@@ -361,6 +376,7 @@ static void toke_stop(const ErlDrvData drv_data) {
   if (NULL != td->hdb) {
     tchdbclose(td->hdb);
     driver_free((char*)td->get_result_spec);
+    driver_free((char*)td->add_int_result_spec);
     driver_free((char*)td->iter_result_spec);
     driver_free((char*)td->reader_error_spec);
     driver_free((char*)td->tokyo_error_spec);
@@ -626,6 +642,25 @@ int toke_get_all(TokeData *const td, Reader *const reader,
   return (tchdbiterinit(td->hdb)) ? toke_get_all1(td, port) : TOKYO_ERROR;
 }
 
+void toke_add_int(TokeData *const td, ErlDrvTermData **const spec,
+              Reader *const reader, const ErlDrvPort port) {
+  if (NULL == td->hdb) {
+    *spec = invalid_state_atom_spec;
+  } else {
+    const uint64_t *keysize = NULL;
+    const char *key = NULL;
+    const int32_t *num = NULL;
+    if (read_binary(reader, &key, &keysize) && read_int32(reader, &num)) {
+      const int32_t value = tchdbaddint(td->hdb, key, *keysize, *num);
+      td->add_int_result_spec[3] = value;
+      driver_output_term(port, td->add_int_result_spec, ADD_INT_RESULT_SPEC_LEN);
+      td->add_int_result_spec[3] = 0;
+    } else {
+      return_reader_error(td, port, reader);
+    }
+  }
+}
+
 static void toke_outputv(ErlDrvData drv_data, ErlIOVec *const ev) {
   Reader reader;
   ErlDrvTermData* spec = NULL;
@@ -699,6 +734,10 @@ static void toke_outputv(ErlDrvData drv_data, ErlIOVec *const ev) {
 
     case TOKE_GET_ALL:
       toke_with_hdb(td, &spec, &reader, port, toke_get_all);
+      break;
+
+    case TOKE_ADD_INT:
+      toke_add_int(td, &spec, &reader, port);
       break;
 
     default:
